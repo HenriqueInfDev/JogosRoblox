@@ -136,6 +136,17 @@ local function getSpeedFactor(state): number
 	return f
 end
 
+local function getIncomeRate(state): number
+	local perDrop = 0
+	for id in pairs(state.Owned) do
+		local item = Config.ById[id]
+		if item and item.Type == "Dropper" then
+			perDrop += item.Value
+		end
+	end
+	return perDrop / (Config.DROP_INTERVAL * getSpeedFactor(state)) * getMultiplier(state)
+end
+
 local function updateBank(state)
 	if state.CollectLabel then
 		state.CollectLabel.Text = Format(state.Bank)
@@ -180,6 +191,18 @@ local function refreshButtons(state)
 		end
 	end
 	if state.Owner then
+		local goal = nil
+		for id, btn in pairs(state.Buttons) do
+			if btn.Parent == state.Model.Buttons then
+				local item = Config.ById[id]
+				if not goal or item.Price < goal.Price then
+					goal = item
+				end
+			end
+		end
+		state.Owner:SetAttribute("NextGoal", goal and goal.Name or "")
+		state.Owner:SetAttribute("NextPrice", goal and goal.Price or 0)
+		state.Owner:SetAttribute("IncomeRate", math.floor(getIncomeRate(state)))
 		state.Owner:SetAttribute("Multiplier", getMultiplier(state))
 		state.Owner:SetAttribute("CanRebirth", state.Owned["trofeu"] == true)
 	end
@@ -534,6 +557,10 @@ local function saveData(player: Player)
 		Rebirths = player:GetAttribute("Rebirths") or 0,
 		Owned = owned,
 		Bank = state and state.Bank or 0,
+		LastDay = data.LastDay,
+		Streak = data.Streak,
+		LastSeen = os.time(),
+		Rate = state and getIncomeRate(state) or data.Rate or 0,
 	}
 	local ok, err = pcall(function()
 		store:SetAsync("p_" .. player.UserId, payload)
@@ -603,6 +630,10 @@ local function onPlayerAdded(player: Player)
 				data.Rebirths = tonumber(result.Rebirths) or 0
 				data.Owned = type(result.Owned) == "table" and result.Owned or {}
 				data.Bank = tonumber(result.Bank) or 0
+				data.LastDay = tonumber(result.LastDay)
+				data.Streak = tonumber(result.Streak) or 0
+				data.LastSeen = tonumber(result.LastSeen)
+				data.Rate = tonumber(result.Rate) or 0
 			end
 		else
 			warn("[Tycoon] Erro ao carregar dados (não vamos salvar por cima):", result)
@@ -616,6 +647,42 @@ local function onPlayerAdded(player: Player)
 	ls.Parent = player
 
 	checkGamepasses(player)
+
+	-- Lucro offline e recompensa diária (só com dados carregados, para não dar em dobro)
+	if data.Loaded then
+		local messages = {}
+		if data.LastSeen and (data.Rate or 0) > 0 then
+			local seconds = math.clamp(os.time() - data.LastSeen, 0, Config.OFFLINE_MAX_HOURS * 3600)
+			local earned = math.floor(seconds * data.Rate * Config.OFFLINE_RATE)
+			if seconds >= 60 and earned > 0 then
+				cash.Value += earned
+				table.insert(messages, { "🌙 Enquanto você estava fora, seu estúdio lucrou " .. Format(earned) .. "!", "ok" })
+			end
+		end
+		local today = math.floor(os.time() / 86400)
+		if data.LastDay ~= today then
+			if data.LastDay == today - 1 then
+				data.Streak = (data.Streak or 0) + 1
+			else
+				data.Streak = 1
+			end
+			data.LastDay = today
+			local day = math.min(data.Streak, 7)
+			local reward = Config.DAILY_BASE * day * (1 + data.Rebirths)
+			cash.Value += reward
+			table.insert(messages, { "🎁 Recompensa diária (dia " .. data.Streak .. "): +" .. Format(reward) .. "  •  Volte amanhã para ganhar mais!", "ok" })
+		end
+		player:SetAttribute("Streak", data.Streak or 0)
+		if #messages > 0 then
+			task.delay(5, function()
+				for _, m in ipairs(messages) do
+					if player.Parent then
+						notify(player, m[1], m[2])
+					end
+				end
+			end)
+		end
+	end
 
 	cash.Changed:Connect(function()
 		local state = playerPlot[player]
@@ -664,6 +731,32 @@ task.spawn(function()
 		end
 	end
 end)
+
+-- ---------- Produtos de desenvolvedor (pacotes de dinheiro) ----------
+local productsById = {}
+for _, product in ipairs(Config.PRODUCTS) do
+	if product.Id ~= 0 then
+		productsById[product.Id] = product
+	end
+end
+local processedReceipts = {}
+
+MarketplaceService.ProcessReceipt = function(receipt)
+	if processedReceipts[receipt.PurchaseId] then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
+	end
+	local player = Players:GetPlayerByUserId(receipt.PlayerId)
+	local product = productsById[receipt.ProductId]
+	if not player or not product or not player:FindFirstChild("leaderstats") then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	local amount = product.Amount * (1 + (player:GetAttribute("Rebirths") or 0))
+	addCash(player, amount)
+	processedReceipts[receipt.PurchaseId] = true
+	notify(player, "💰 " .. product.Name .. ": +" .. Format(amount), "ok")
+	task.spawn(saveData, player)
+	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
 
 -- ---------- Rebirth ----------
 rebirthFunc.OnServerInvoke = function(player)

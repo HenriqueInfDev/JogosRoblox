@@ -63,10 +63,37 @@ local infoLabel = label(cashFrame, "x1.0 • Rebirths: 0", Enum.Font.GothamBold,
 infoLabel.Size = UDim2.new(1, -20, 0.3, 0)
 infoLabel.Position = UDim2.new(0, 10, 0.62, 0)
 
+-- ---------- Próxima meta ----------
+local goalFrame = Instance.new("Frame")
+goalFrame.AnchorPoint = Vector2.new(0.5, 0)
+goalFrame.Position = UDim2.new(0.5, 0, 0, 84)
+goalFrame.Size = UDim2.fromOffset(280, 44)
+goalFrame.BackgroundColor3 = Color3.fromRGB(22, 24, 38)
+goalFrame.BackgroundTransparency = 0.1
+goalFrame.Visible = false
+goalFrame.Parent = gui
+corner(goalFrame, 12)
+
+local goalLabel = label(goalFrame, "", Enum.Font.GothamBold, Color3.new(1, 1, 1))
+goalLabel.Size = UDim2.new(1, -16, 0, 18)
+goalLabel.Position = UDim2.fromOffset(8, 4)
+
+local barBack = Instance.new("Frame")
+barBack.Size = UDim2.new(1, -16, 0, 12)
+barBack.Position = UDim2.fromOffset(8, 26)
+barBack.BackgroundColor3 = Color3.fromRGB(50, 52, 70)
+barBack.Parent = goalFrame
+corner(barBack, 6)
+local barFill = Instance.new("Frame")
+barFill.Size = UDim2.fromScale(0, 1)
+barFill.BackgroundColor3 = Color3.fromRGB(110, 255, 140)
+barFill.Parent = barBack
+corner(barFill, 6)
+
 -- ---------- Notificações ----------
 local toastHolder = Instance.new("Frame")
 toastHolder.AnchorPoint = Vector2.new(0.5, 0)
-toastHolder.Position = UDim2.new(0.5, 0, 0, 86)
+toastHolder.Position = UDim2.new(0.5, 0, 0, 136)
 toastHolder.Size = UDim2.fromOffset(380, 220)
 toastHolder.BackgroundTransparency = 1
 toastHolder.Parent = gui
@@ -180,6 +207,71 @@ passAutoBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
+-- ---------- Loja de pacotes de dinheiro ----------
+local activeProducts = {}
+for _, product in ipairs(Config.PRODUCTS) do
+	if product.Id ~= 0 then
+		table.insert(activeProducts, product)
+	end
+end
+
+local shopBtn = sideButton("🛒 Loja", Color3.fromRGB(39, 174, 96), 4)
+shopBtn.Visible = #activeProducts > 0
+
+local shop = Instance.new("Frame")
+shop.AnchorPoint = Vector2.new(0.5, 0.5)
+shop.Position = UDim2.fromScale(0.5, 0.5)
+shop.Size = UDim2.fromOffset(340, 90 + #activeProducts * 64)
+shop.BackgroundColor3 = Color3.fromRGB(22, 24, 38)
+shop.Visible = false
+shop.Parent = gui
+corner(shop, 16)
+stroke(shop, Color3.fromRGB(39, 174, 96), 3)
+
+local shopTitle = label(shop, "🛒 Pacotes de Dinheiro", Enum.Font.FredokaOne, Color3.new(1, 1, 1))
+shopTitle.Size = UDim2.new(1, -60, 0, 40)
+shopTitle.Position = UDim2.fromOffset(14, 10)
+shopTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.fromOffset(36, 36)
+closeBtn.Position = UDim2.new(1, -46, 0, 12)
+closeBtn.BackgroundColor3 = Color3.fromRGB(192, 57, 43)
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.Font = Enum.Font.FredokaOne
+closeBtn.TextSize = 20
+closeBtn.Text = "X"
+closeBtn.Parent = shop
+corner(closeBtn, 8)
+
+for i, product in ipairs(activeProducts) do
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, -28, 0, 54)
+	b.Position = UDim2.fromOffset(14, 60 + (i - 1) * 64)
+	b.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+	b.TextColor3 = Color3.new(1, 1, 1)
+	b.Font = Enum.Font.FredokaOne
+	b.TextSize = 20
+	b.Parent = shop
+	corner(b, 10)
+	local function updateText()
+		local amount = product.Amount * (1 + (player:GetAttribute("Rebirths") or 0))
+		b.Text = "💰 " .. product.Name .. "  •  +" .. Format(amount)
+	end
+	updateText()
+	player:GetAttributeChangedSignal("Rebirths"):Connect(updateText)
+	b.MouseButton1Click:Connect(function()
+		MarketplaceService:PromptProductPurchase(player, product.Id)
+	end)
+end
+
+shopBtn.MouseButton1Click:Connect(function()
+	shop.Visible = not shop.Visible
+end)
+closeBtn.MouseButton1Click:Connect(function()
+	shop.Visible = false
+end)
+
 -- ---------- Dica inicial ----------
 local hint = Instance.new("TextLabel")
 hint.AnchorPoint = Vector2.new(0.5, 1)
@@ -208,7 +300,17 @@ local function refresh()
 	cashLabel.Text = Format(cashValue.Value)
 	local mult = player:GetAttribute("Multiplier") or 1
 	local reb = player:GetAttribute("Rebirths") or 0
-	infoLabel.Text = string.format("x%.1f renda • Rebirths: %d", mult, reb)
+	local rate = player:GetAttribute("IncomeRate") or 0
+	infoLabel.Text = string.format("%s/s  •  x%.1f  •  Rebirths: %d", Format(rate), mult, reb)
+	local goal = player:GetAttribute("NextGoal") or ""
+	local price = player:GetAttribute("NextPrice") or 0
+	goalFrame.Visible = goal ~= "" and player:GetAttribute("PlotName") ~= nil
+	if goalFrame.Visible then
+		local ratio = price > 0 and math.clamp(cashValue.Value / price, 0, 1) or 1
+		goalLabel.Text = (ratio >= 1 and "✅ Pode comprar: " or "🎯 Próxima meta: ") .. goal .. " (" .. Format(price) .. ")"
+		TweenService:Create(barFill, TweenInfo.new(0.2), { Size = UDim2.fromScale(ratio, 1) }):Play()
+		barFill.BackgroundColor3 = ratio >= 1 and Color3.fromRGB(255, 210, 63) or Color3.fromRGB(110, 255, 140)
+	end
 	rebirthBtn.BackgroundColor3 = player:GetAttribute("CanRebirth") and Color3.fromRGB(155, 89, 182)
 		or Color3.fromRGB(110, 110, 130)
 	pass2xBtn.Visible = Config.GAMEPASS_2X_ID ~= 0 and not player:GetAttribute("Has2x")

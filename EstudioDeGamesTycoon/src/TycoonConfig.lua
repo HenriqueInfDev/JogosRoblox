@@ -8,11 +8,22 @@ local Config = {}
 Config.GAMEPASS_2X_ID = 0          -- "Dinheiro em Dobro"
 Config.GAMEPASS_AUTOCOLLECT_ID = 0 -- "Coleta Automática"
 
+-- Produtos de desenvolvedor (pacotes de dinheiro, podem ser comprados várias vezes; 0 = desativado)
+-- O valor é multiplicado por (1 + rebirths), para continuar útil no fim do jogo.
+Config.PRODUCTS = {
+	{ Id = 0, Name = "Pacote Pequeno", Amount = 5000 },
+	{ Id = 0, Name = "Pacote Médio",   Amount = 50000 },
+	{ Id = 0, Name = "Pacote Grande",  Amount = 500000 },
+}
+
 Config.DATASTORE_NAME = "EstudioTycoon_v1"
 Config.DROP_INTERVAL = 2      -- segundos entre cada cartucho produzido
 Config.CONVEYOR_SPEED = 9     -- velocidade da esteira
 Config.REBIRTH_BONUS = 0.5    -- +50% de renda por rebirth
 Config.START_CASH = 0
+Config.DAILY_BASE = 500        -- recompensa diária = DAILY_BASE x dia da sequência (até 7) x (1 + rebirths)
+Config.OFFLINE_MAX_HOURS = 8   -- máximo de horas de lucro offline
+Config.OFFLINE_RATE = 0.5      -- o estúdio rende 50% enquanto o jogador está fora
 Config.BASE_ITEMS = { "mesa1" } -- itens que todo estúdio já começa com
 
 -- Tipos:

@@ -6,4 +6,4 @@ para publicar e monetizar.
 
 | Jogo | Pasta | Tipo |
 |------|-------|------|
-| Estúdio de Games Tycoon | [EstudioDeGamesTycoon](EstudioDeGamesTycoon) | Tycoon com rebirth |
+| Estúdio de Games Tycoon | [EstudioDeGamesTycoon](EstudioDeGamesTycoon) | Tycoon de 3 andares com rebirth, pets, VIP e ranking |
